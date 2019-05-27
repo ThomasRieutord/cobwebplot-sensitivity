@@ -32,6 +32,7 @@ Copyright (C) 2019  CNRM/GMEI/LISA Thomas Rieutord
 import os
 import time
 import numpy as np
+import pandas as pd
 import netCDF4 as nc
 import matplotlib.pyplot as plt
 
@@ -136,7 +137,7 @@ def cobwebplot(X,Y,posLowest_negHighest=-1,n_threads=None,variablesNames=None,ca
 	
 	plt.show(block=False)
 	if storeImages:
-		plt.savefig(figureDir+"_".join(["cobweb",lowest_highest[posLowest_negHighest],variablesNames[-1]])+fmtImages)
+		plt.savefig(figureDir+"_".join(["cobweb_example-mixed",lowest_highest[posLowest_negHighest],variablesNames[-1]])+fmtImages)
 	#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 	
 	return fig
@@ -228,7 +229,7 @@ def cobwebplot_quantitative(X,Y,posLowest_negHighest=-1,n_threads=None,variables
 	
 	plt.show(block=False)
 	if storeImages:
-		plt.savefig(figureDir+"_".join(["cobweb",lowest_highest[posLowest_negHighest],variablesNames[-1]])+fmtImages)
+		plt.savefig(figureDir+"_".join(["cobweb_example-quantitative",lowest_highest[posLowest_negHighest],variablesNames[-1]])+fmtImages)
 	#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 	
 	return fig
@@ -325,46 +326,11 @@ def cobwebplot_categorical(X,Y,posLowest_negHighest=-1,n_threads=None,variablesN
 	
 	plt.show(block=False)
 	if storeImages:
-		plt.savefig(figureDir+"_".join(["cobweb",lowest_highest[posLowest_negHighest],variablesNames[-1]])+fmtImages)
+		plt.savefig(figureDir+"_".join(["cobweb_example-categorical",lowest_highest[posLowest_negHighest],variablesNames[-1]])+fmtImages)
 	#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 	
 	return fig
 
-
-def load_scores_ALLdataset(datasetname,scoreName='CH_index'):
-	'''Charge un fichier de scores depuis un fichier netCDF (boundary layer classification).
-	Convention pour nommer les fichiers :
-		'SCORE-CLASSIFICATION_CAMPAGNE_AUTRESINFOS.nc'
-	
-	[IN]
-		- loadfilename (str): chemin et nom du fichier à charger.
-		- scoreName (str): nom du score à extraire. Parmi ['CH_index','sil_score'].
-		
-	[OUT]
-		- Y (np.array[N]): valeurs du score extrait
-		- X (np.array[N,p]): indices pour retrouver les réglages qui ont donné ces scores
-		- coordNames (list[p] of str): noms des réglages qui ont varié
-		- settingsValues (dict): valeurs qu'on pris ces réglages
-			settingsValues[coordNames[0]]= liste des valeurs prises par le réglage en première position
-			settingsValues[coordNames[j]][X[i,j]]= valeur que prend le réglage j dans l'expérience i
-	'''
-	
-	dataset = nc.Dataset(datasetname)
-	
-	coordNames = list(dataset.dimensions.keys())
-	settingsValues = {}
-	for coord in coordNames:
-		try:
-			settingsValues[coord]=np.array(dataset.variables[coord])
-		except KeyError:
-			continue
-	
-	Y=np.array(dataset.variables[scoreName])
-	X=np.array(dataset.variables['settings'])	
-	print("% Nan Y:",np.sum(np.isnan(Y)))
-	print("% Nan X:",np.sum(np.isnan(X)))
-	
-	return Y[~np.isnan(Y)],X[~np.isnan(Y),:],coordNames,settingsValues
 
 if __name__=='__main__':
 	
@@ -375,17 +341,15 @@ if __name__=='__main__':
 	# Load test data
 	#----------------
 	
-	dataDir=""
 	
-	X = np.loadtxt(os.path.join(dataDir,"valParam.txt"))
-	Y = np.loadtxt(os.path.join(dataDir,"rmseW.txt"))
-	with open(os.path.join(dataDir,"namesParam.txt"),'r') as f:
-		variablesNames=[l.strip() for l in f.readlines()]
-	variablesNames[-1]='rmseW'
-	print("variablesNames=",variablesNames)
+	qttv=pd.read_csv("DATA_quantitative_inputs.txt",sep=" ")
+	variablesNames = list(qttv.columns)
+	X = qttv.iloc[:,:-1].values
+	Y = qttv.iloc[:,-1].values
 	
 	N,p = X.shape
 	print("Number of obs:",N,"Number of parameters:",p)
+	print("variablesNames=",variablesNames)
 	
 	
 	# Make cobweb plots
@@ -405,17 +369,19 @@ if __name__=='__main__':
 	# Load test data
 	#----------------
 	
-	dataDir="/cnrm/lisa/data1/Rieutord/Classif_PASSY2015_IOP2/ANALYSE-SENSIBILITE/"
-	scoreFile = "TEST183-SCORES-CLASSIFICATION_PASSY2015_ALLDATASETS.nc"
-	scoreName = 'CH_index'
-	posWorst_negBest = -1
-
-	Y,X,coordNames,settingsValues=load_scores_ALLdataset(os.path.join(dataDir,scoreFile),scoreName=scoreName)
+	catg=pd.read_csv("DATA_categorical_inputs.txt",sep=" ")
+	variablesNames = list(catg.columns)
+	X = catg.iloc[:,:-1].values
+	Y = catg.iloc[:,-1].values
+	
+	settingsValues = {}
+	with open("DATA_categories.txt",'r') as f:
+		for l in f.readlines():
+			inp,rest=l.strip().split(":")
+			settingsValues[inp]=rest.split(" ")
 	
 	N,p = X.shape
 	print("Number of obs:",N,"Number of parameters:",p)
-	variablesNames=coordNames[:-2]
-	variablesNames.append(scoreName)
 	print("variablesNames=",variablesNames)
 	
 	# Make cobweb plots
@@ -434,33 +400,23 @@ if __name__=='__main__':
 	print("\n=== Mixed variables types ===")
 	
 	
-	# Created (fake) mixed data
-	#---------------------------
+	# Load test data
+	#----------------
 	
-	Y = np.loadtxt("rmseW.txt")
-	N=Y.size
-	X_catg = X[:N,:]
-	vn_catg = variablesNames.copy()
-	X_qttv = np.loadtxt("valParam.txt")
-	with open("namesParam.txt",'r') as f:
-		vn_qttv=[l.strip() for l in f.readlines()]
-		del vn_qttv[-1] #last item is empty
+	mix=pd.read_csv("DATA_mixedtypes_inputs.txt",sep=" ")
+	variablesNames = list(mix.columns)
+	X = mix.iloc[:,:-1].values
+	Y = mix.iloc[:,-1].values
 	
-	dex_catg = [6,7]
-	dex_mix = [1,5]
-	p=p+len(dex_catg)
+	settingsValues = {}
+	with open("DATA_categories.txt",'r') as f:
+		for l in f.readlines():
+			inp,rest=l.strip().split(":")
+			settingsValues[inp]=rest.split(" ")
 	
-	X=X_qttv.copy()
-	for j in range(len(dex_catg)):
-		X=np.insert(X,dex_mix[j],X_catg[:,dex_catg[j]],axis=1)
-	
-	variablesNames = vn_qttv.copy()
-	for j in range(len(dex_catg)):
-		variablesNames.insert(dex_mix[j],vn_catg[dex_catg[j]])
-	print(variablesNames)
-	variablesNames.append("mixedCatgQttv")
-	
-	catg_namesNvalues = {variablesNames[j]:settingsValues[variablesNames[j]] for j in dex_mix}
+	N,p = X.shape
+	print("Number of obs:",N,"Number of parameters:",p)
+	print("variablesNames=",variablesNames)
 	
 	# Make cobweb plots
 	#-------------------
@@ -469,7 +425,7 @@ if __name__=='__main__':
 	cobwebplot(X,Y)
 	
 	# More personalised plot
-	cobwebplot(X,Y,variablesNames=variablesNames,categorical_namesNvalues=catg_namesNvalues,storeImages=True,fmtImages='.png')
+	cobwebplot(X,Y,variablesNames=variablesNames,categorical_namesNvalues=settingsValues,storeImages=True,fmtImages='.png')
 	
 	input("\n Press Enter to exit (close down all figures)\n")
 	
